@@ -165,6 +165,8 @@ Checklist 8 hạng mục của một báo cáo EDA đầy đủ:
 
 ### Kiểm chứng giả thuyết
 
+**Video demo:** [Xem trên Google Drive](https://drive.google.com/file/d/1_LXXTYGLHho0569W_2mSie4jfOMiAnrf/view?usp=drive_link)
+
 <!-- TODO: chèn ảnh result_5.png (kết quả kiểm chứng H1/H2/H3) -->
 
 Trên bộ dữ liệu phụ tải điện Việt Nam (75.841 dòng × 4 cột), agent tự sinh 3 giả thuyết và kiểm chứng bằng số liệu thực:
