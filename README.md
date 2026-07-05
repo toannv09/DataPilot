@@ -72,7 +72,7 @@ Trọng tâm kỹ thuật của đề tài. Thiết kế theo nguyên tắc **"D
 - Tự sinh câu hỏi phân tích dựa trên schema và kết quả Phase 1 — giải quyết rào cản "không biết bắt đầu từ đâu" của người dùng không chuyên
 - Sinh giả thuyết domain-aware: chỉ đề xuất giả thuyết nằm trong khả năng kiểm chứng của các tool sẵn có
 - LLM **chọn tool từ registry đã kiểm chứng** (không tự sinh code tuỳ ý) — giảm rủi ro tạo thao tác sai
-- Guard runtime nhiều lớp: bỏ qua tool không phù hợp schema (DatetimeIndex required, cột quá ít giá trị), chặn chart trùng lặp, retry khi tool lỗi
+- Guard runtime nhiều lớp: bỏ qua tool không phù hợp schema (DatetimeIndex required, cột quá ít giá trị), kiểm tra tên cột trong tham số tồn tại trong dataset, chặn chart trùng lặp, retry khi tool lỗi
 - Kiểm chứng giả thuyết bằng số liệu thực: kết luận **xác nhận / bác bỏ / không đủ bằng chứng** — không chỉ confirm theo kỳ vọng ban đầu
 
 <img width="1885" height="757" alt="image" src="https://github.com/user-attachments/assets/6ccfe4d7-e203-4b28-920a-98adbd59b507" />
@@ -130,7 +130,7 @@ Tính từ **114 phiên chạy thật** (26/6–2/7/2026, gộp cả 6 nghiệp 
 | **Step-level Pass Rate** | **98,9%** |
 | **Phiên không có lỗi nào** | **89/114 (78,1%)** |
 
-Toàn bộ 17 lỗi có cùng nguyên nhân: LLM planner tham chiếu tên cột dẫn xuất chưa tồn tại trong schema (`day_type`, `is_weekend`, `is_summer`) khi gọi `group_stats`/`plot_boxplot_by` — đây là failure mode đã xác định, chưa có guard runtime tương ứng, là hướng cải tiến tiếp theo.
+Toàn bộ 17 lỗi thuộc 3 loại: LLM tham chiếu tên cột dẫn xuất chưa tồn tại trong dataset (đã có guard, nay ghi nhận là `skipped`), tool nhận tham số không tương thích kiểu dữ liệu, và API rate limit khi retry. Guard runtime cho loại đầu tiên đã được bổ sung sau đợt đo này.
 
 ### Chi phí vận hành (Token Consumption)
 
@@ -317,7 +317,7 @@ docker compose up
 ## Hạn chế
 
 - Mới kiểm chứng trên 3 domain (điện lực, bán lẻ, nhân sự)
-- Failure mode chưa có guard: LLM tham chiếu cột dẫn xuất chưa tồn tại (`day_type`, `is_weekend`)
+- Guard runtime chưa phủ hết edge case: tham số kiểu dữ liệu không tương thích, cột dẫn xuất chưa tồn tại ngoài những tên đã biết
 - Đánh giá tính trung thực phân tích mới ở mức định tính trên số ít phiên
 - Chưa có phản hồi từ người dùng không chuyên thực tế (đối tượng mục tiêu chính)
 - Phụ thuộc OpenAI API — ảnh hưởng độ ổn định khi triển khai thực tế
