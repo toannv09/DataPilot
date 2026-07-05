@@ -80,6 +80,7 @@ DISTRIBUTION_SHAPE_TOOLS = {
     "skewness_kurtosis", "normality_test",
 }
 MIN_UNIQUE_FOR_DISTRIBUTION = 5
+COL_PARAM_KEYS = {"col", "cols", "col1", "col2", "by", "target_col"}
 
 
 def _col_has_enough_variety(df, col):
@@ -481,6 +482,22 @@ class EDAAgent(BaseAgent):
                         "reason": f"cột '{params['col']}' có quá ít giá trị duy nhất, không phù hợp phân tích phân phối",
                     })
                     continue
+
+            _col_refs = []
+            for _k, _v in params.items():
+                if _k not in COL_PARAM_KEYS:
+                    continue
+                if isinstance(_v, str):
+                    _col_refs.append(_v)
+                elif isinstance(_v, list):
+                    _col_refs.extend(x for x in _v if isinstance(x, str))
+            _missing_cols = [c for c in _col_refs if c not in df.columns]
+            if _missing_cols:
+                log.append({
+                    "step": tool_name, "params": params, "status": "skipped",
+                    "reason": f"cột không tồn tại trong dataset: {_missing_cols}",
+                })
+                continue
 
             for retry_count in range(MAX_RETRIES):
                 try:
