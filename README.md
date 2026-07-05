@@ -277,7 +277,7 @@ pip install -r requirements.txt
 
 # 3. Tạo file .env
 cp .env.example .env
-# Mở .env, điền OPENAI_API_KEY=sk-...
+# Mở .env và điền các biến (xem bảng bên dưới)
 
 # 4. Chạy giao diện
 python ui_nicegui/app.py
@@ -287,13 +287,25 @@ python ui_nicegui/app.py
 uvicorn mlops.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### Biến môi trường (`.env`)
+
+| Biến | Bắt buộc | Mô tả |
+|---|---|---|
+| `OPENAI_API_KEY` | Có | API key OpenAI — bắt buộc để chạy LLM planning, sinh insight, câu hỏi phân tích. Lấy tại [platform.openai.com](https://platform.openai.com/api-keys). |
+| `WANDB_API_KEY` | Không | API key Weights & Biases — chỉ dùng để log token consumption (Mục "Chi phí vận hành"). Nếu bỏ trống, hệ thống vẫn chạy bình thường, chỉ tắt tracking. Lấy tại [wandb.ai/authorize](https://wandb.ai/authorize). |
+
+> **Lưu ý:** Hệ thống hiện gọi thẳng OpenAI qua package `openai` ([llm/client.py](llm/client.py)), model mặc định `gpt-5.4-nano`. Muốn dùng LLM provider khác (Anthropic, Gemini, model local...) thì không chỉ đổi API key — phải sửa lại package/SDK gọi API và logic tương ứng trong `llm/client.py` cho phù hợp với provider đó.
+
 ### Chạy bằng Docker
 
 ```bash
-# Build image trước
+# 1. Tạo file .env (nếu chưa có — xem bảng biến môi trường ở trên)
+cp .env.example .env
+
+# 2. Build image
 docker compose build
 
-# Sau đó khởi động
+# 3. Khởi động
 docker compose up
 # UI: http://localhost:8502
 # API: http://localhost:8000
