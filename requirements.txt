@@ -1,4 +1,5 @@
 streamlit
+nicegui
 python-dotenv
 openai
 pandas

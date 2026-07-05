@@ -13,6 +13,7 @@ class ExperimentContext:
     files: dict = field(default_factory=dict)        # filename -> DataFrame
     file_paths: dict = field(default_factory=dict)   # filename -> path trên disk
     domain_context: str = ""
+    domain_name: str = ""
     user_query: str = ""
     extra: dict = field(default_factory=dict)        # output từ agent trước (dùng trong pipeline)
 

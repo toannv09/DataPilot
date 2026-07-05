@@ -12,7 +12,7 @@ import pandas as pd
 
 from agents.base_agent import AgentResult, BaseAgent
 from agents.preprocessing_planner import plan as preprocessing_plan
-from llm.client import MODEL_8B, call_llm
+from llm.client import MODEL_LITE, call_llm
 from tools.ml.pipeline import MIN_UNIQUE_FOR_OUTLIER_CLIP, PreprocessingPipeline
 from tools.quality_checker import check_missing
 
@@ -120,7 +120,7 @@ class PreprocessingAgent(BaseAgent):
 
             if steps_log:
                 description = call_llm(
-                    DESCRIBE_STEPS_PROMPT.format(steps="\n".join(steps_log)), model=MODEL_8B
+                    DESCRIBE_STEPS_PROMPT.format(steps="\n".join(steps_log)), model=MODEL_LITE
                 )
             else:
                 description = "Dữ liệu không cần xử lý thêm — không có giá trị thiếu hoặc cột phân loại."

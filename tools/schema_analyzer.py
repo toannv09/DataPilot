@@ -99,7 +99,6 @@ def find_join_candidates(files):
         for j in range(i + 1, len(file_names)):
             a, b = file_names[i], file_names[j]
 
-            # Cặp cột thời gian
             for col_a, freq_a in file_meta[a]["datetime_cols"].items():
                 for col_b, freq_b in file_meta[b]["datetime_cols"].items():
                     candidates.append({
@@ -113,7 +112,6 @@ def find_join_candidates(files):
                         "same_freq": freq_a == freq_b,
                     })
 
-            # Cặp cột tên trùng nhau (vd: province)
             common_cols = file_meta[a]["columns"] & file_meta[b]["columns"]
             for col in common_cols:
                 if col in file_meta[a]["datetime_cols"]:

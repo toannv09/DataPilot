@@ -6,7 +6,7 @@ from sklearn.base import ClusterMixin, is_regressor
 from sklearn.metrics import silhouette_score
 
 from agents.base_agent import AgentResult, BaseAgent
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from llm.prompts.ml_prompt import ML_EXPLANATION_USER
 from tools.ml.ml_viz import plot_actual_vs_predicted, plot_cluster_scatter, plot_confusion_matrix, plot_residuals
 from tools.ml.metrics import compute_supervised_metrics
@@ -90,7 +90,7 @@ class EvaluationAgent(BaseAgent):
                     feature_importance="{}",
                     domain_context=context.domain_context,
                 ),
-                model=MODEL_70B,
+                model=MODEL_DEFAULT,
             )
 
             self._status = "done"

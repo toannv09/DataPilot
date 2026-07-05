@@ -3,7 +3,7 @@
 import json
 import re
 
-from llm.client import MODEL_8B, call_llm
+from llm.client import MODEL_LITE, call_llm
 
 QUESTION_GEN_SYSTEM = """
 Bạn là data analyst. Nhìn vào schema dataset, sinh ra các câu hỏi phân tích
@@ -54,7 +54,7 @@ def generate_questions(schemas, user_query="", domain_context="", has_datetime=F
         profiling_hint=profiling_hint,
     )
     try:
-        response = call_llm(prompt, system=QUESTION_GEN_SYSTEM, model=MODEL_8B)
+        response = call_llm(prompt, system=QUESTION_GEN_SYSTEM, model=MODEL_LITE)
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
             return json.loads(match.group(0))

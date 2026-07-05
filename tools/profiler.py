@@ -40,13 +40,11 @@ def run_profiling(df, sample_size=5000):
             )
             desc = profile.get_description()
 
-        # Variable stats
         variables = {}
         for col, stats in desc.variables.items():
             filtered = {k: v for k, v in stats.items() if k in KEEP_STATS}
             variables[col] = filtered
 
-        # Alerts
         alerts = []
         for alert in desc.alerts:
             alert_type = getattr(alert, "alert_type", None)
@@ -55,7 +53,6 @@ def run_profiling(df, sample_size=5000):
                 "type": alert_type.name if hasattr(alert_type, "name") else str(alert_type or alert),
             })
 
-        # Top correlations
         top_corr = []
         try:
             pearson = desc.correlations.get("pearson")

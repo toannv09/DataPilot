@@ -2,7 +2,7 @@
 
 import json
 
-from llm.client import MODEL_8B, call_llm
+from llm.client import MODEL_LITE, call_llm
 from tools.schema_analyzer import find_join_candidates, read_schema, suggest_merge_plan
 
 MERGE_SUGGESTION_USER = """
@@ -49,7 +49,7 @@ def detect(files, file_paths=None):
             files_info=json.dumps(schemas, ensure_ascii=False, default=str),
             join_candidates=json.dumps(join_candidates, ensure_ascii=False, default=str),
         )
-        suggestion = call_llm(prompt, model=MODEL_8B)
+        suggestion = call_llm(prompt, model=MODEL_LITE)
 
     return {
         "schemas": schemas,

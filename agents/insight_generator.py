@@ -3,7 +3,7 @@
 import json
 import re
 
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from llm.prompts.insight_prompt import DOMAIN_GENERIC, INSIGHT_SYSTEM, INSIGHT_USER
 
 MAX_LIST_ITEMS = 20
@@ -91,7 +91,6 @@ def generate(eda_results, domain_context="", hypotheses=None, charts=None):
         available_charts=_format_chart_list(charts),
     )
 
-    # Nếu có hypotheses, thêm yêu cầu đánh giá vào prompt
     if hypotheses:
         hyp_lines = "\n".join(f"H{i+1}: {h}" for i, h in enumerate(hypotheses))
         prompt += f"""
@@ -115,4 +114,4 @@ trong ngoặc (vd thay vì "r=-0.04" hãy viết "mức tương quan rất yếu
   chưa được thực hiện"), không chỉ nói chung là "không có dữ liệu"
 """
 
-    return call_llm(prompt, system=INSIGHT_SYSTEM, model=MODEL_70B)
+    return call_llm(prompt, system=INSIGHT_SYSTEM, model=MODEL_DEFAULT)

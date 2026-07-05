@@ -3,7 +3,7 @@
 import json
 import re
 
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from llm.prompts.planner_prompt import PLANNER_SYSTEM, PLANNER_USER
 
 
@@ -34,13 +34,12 @@ def plan(user_query, file_info, domain_context="", available_columns=None,
         phase1_summary=phase1_summary or "(chưa có — lập kế hoạch từ đầu)",
     )
 
-    response = call_llm(prompt, system=PLANNER_SYSTEM, model=MODEL_70B)
+    response = call_llm(prompt, system=PLANNER_SYSTEM, model=MODEL_DEFAULT, temperature=0)
 
     try:
         return _extract_json(response)
     except (json.JSONDecodeError, AttributeError):
-        # retry 1 lần không dùng cache
-        response = call_llm(prompt, system=PLANNER_SYSTEM, model=MODEL_70B, use_cache=False)
+        response = call_llm(prompt, system=PLANNER_SYSTEM, model=MODEL_DEFAULT, use_cache=False, temperature=0)
         try:
             return _extract_json(response)
         except (json.JSONDecodeError, AttributeError):

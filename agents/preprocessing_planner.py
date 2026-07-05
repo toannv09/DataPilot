@@ -3,7 +3,7 @@
 import json
 import re
 
-from llm.client import MODEL_8B, call_llm
+from llm.client import MODEL_LITE, call_llm
 from llm.prompts.preprocessing_prompt import PREPROCESSING_PLANNER_SYSTEM, PREPROCESSING_PLANNER_USER
 
 DEFAULT_PLAN = {
@@ -27,7 +27,7 @@ def plan(user_query, quality_summary):
         quality_summary=quality_summary,
     )
     try:
-        response = call_llm(prompt, system=PREPROCESSING_PLANNER_SYSTEM, model=MODEL_8B)
+        response = call_llm(prompt, system=PREPROCESSING_PLANNER_SYSTEM, model=MODEL_LITE)
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
             result = dict(DEFAULT_PLAN)

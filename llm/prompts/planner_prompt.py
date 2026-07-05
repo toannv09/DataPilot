@@ -57,7 +57,9 @@ Tool có sẵn (tên tool và params chính xác — chỉ dùng đúng tên par
 - check_missing(): không có params
 - check_duplicates(): không có params
 - check_type_mismatch(): không có params
-- check_outliers_iqr(col): col là tên 1 cột số
+- check_outliers_iqr(col): col là tên 1 cột số. ĐÃ chạy cho MỌI cột số ở Phase 1 — xem
+  "Kết quả kiểm tra chất lượng ban đầu", không cần gọi lại trừ khi muốn outlier theo
+  phương pháp khác (vd check_outliers_rolling cho time series)
 
 [Thống kê mô tả]
 - basic_stats(cols): cols là danh sách tên cột số
@@ -66,7 +68,8 @@ Tool có sẵn (tên tool và params chính xác — chỉ dùng đúng tên par
 - group_stats(col, by): col là tên 1 cột số, by là tên 1 cột categorical — thống kê theo nhóm
 
 [Tương quan]
-- correlation_matrix(cols): cols là danh sách tên cột số — Pearson
+- correlation_matrix(cols): cols là danh sách tên cột số — Pearson. ĐÃ chạy cho TẤT CẢ cột số
+  ở Phase 1 nếu có ≥2 cột — chỉ gọi lại nếu muốn xem tập cột con khác
 - spearman_correlation(cols): cols là danh sách tên cột số — Spearman (dùng khi có outlier)
 - lag_correlation(col1, col2, max_lag): col1, col2 là tên 2 cột số khác nhau, max_lag là số nguyên
 - mutual_info_scores(target_col): target_col là tên cột target — chỉ gọi khi user đề cập prediction/target

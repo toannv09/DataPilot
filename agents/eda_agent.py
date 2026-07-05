@@ -50,6 +50,14 @@ CHART_TOOLS = {
     "plot_scatter", "plot_violin", "plot_boxplot_by", "plot_mi_scores", "plot_pairplot",
 }
 
+# Chart có tỷ lệ/độ phức tạp không hợp với lưới 2 cột đồng nhất (quá rộng — time series/lag
+# correlation; hoặc nhiều panel con — pairplot/decomposition/missing_heatmap) — hiển thị
+# full-width ở UI thay vì bị bóp nhỏ chung 1 cột.
+WIDE_CHART_TOOLS = {
+    "plot_time_series", "plot_lag_correlation", "plot_pairplot",
+    "plot_decomposition", "plot_missing_heatmap",
+}
+
 # Tool nào nhận "col" (1 cột), "cols" (danh sách cột), hoặc không nhận cột nào.
 NO_COLUMN_TOOLS = {"check_missing", "check_duplicates", "check_type_mismatch", "plot_missing_heatmap"}
 COLS_LIST_TOOLS = {"basic_stats", "correlation_matrix", "spearman_correlation", "plot_heatmap", "plot_pairplot"}
@@ -167,7 +175,15 @@ _PHASE1_TOOLS = ["check_missing", "check_duplicates", "check_type_mismatch"]
 
 
 def _run_phase1(df):
-    """Chạy kiểm tra chất lượng cứng (không cần LLM). Trả về results và log."""
+    """Chạy kiểm tra chất lượng cứng (không cần LLM). Trả về results và log.
+
+    Ngoài check_missing/duplicates/type_mismatch/basic_stats, còn chạy CỨNG (không phụ thuộc
+    LLM planner Phase 2 có chọn hay không):
+    - check_outliers_iqr cho MỌI cột số — trước đây hoàn toàn tùy LLM chọn, có thể không bao
+      giờ chạy dù dataset rõ ràng có outlier (stat-card "Outlier phát hiện" ở UI hay ra "—").
+    - correlation_matrix (Pearson) cho mọi cột số nếu có ≥2 cột, kèm significance scoring
+      ngay — để stat-card "Tương quan cao nhất" luôn có số liệu thật, không phụ thuộc planner.
+    """
     results, log = {}, []
     numeric_cols = list(df.select_dtypes(include="number").columns)
     steps = [
@@ -177,6 +193,10 @@ def _run_phase1(df):
     ]
     if numeric_cols:
         steps.append({"tool": "basic_stats", "params": {"cols": numeric_cols}})
+        for col in numeric_cols:
+            steps.append({"tool": "check_outliers_iqr", "params": {"col": col}})
+        if len(numeric_cols) >= 2:
+            steps.append({"tool": "correlation_matrix", "params": {"cols": numeric_cols}})
 
     for step in steps:
         tool_name = step["tool"]
@@ -186,8 +206,13 @@ def _run_phase1(df):
             continue
         try:
             output = func(df, **params)
-            results[tool_name] = output.to_dict(orient="records") if isinstance(output, pd.DataFrame) else output
-            log.append({"step": tool_name, "params": params, "status": "success", "retry_count": 0})
+            result_key = _disambiguated_key(tool_name, params, results)
+            results[result_key] = output.to_dict(orient="records") if isinstance(output, pd.DataFrame) else output
+            _auto_score(results, tool_name, result_key, params, df)
+            log.append({
+                "step": tool_name, "params": params, "status": "success",
+                "retry_count": 0, "result_key": result_key,
+            })
         except Exception as e:
             log.append({"step": tool_name, "params": params, "status": "error", "error": str(e)})
 
@@ -221,10 +246,24 @@ def _trigger_rules(phase1_results, df):
 
     basic = phase1_results.get("basic_stats", {})
     if isinstance(basic, dict):
-        for col, stats in basic.items():
-            if isinstance(stats, dict) and abs(stats.get("skewness", 0) if "skewness" in stats else 0) > 1.5:
-                extra.append({"tool": "plot_violin", "params": {"col": col}})
-                break  # chỉ thêm 1 col lệch nhất
+        # basic_stats() không tính skewness (chỉ mean/median/std/min/max/p25/p75/p95) — tính
+        # trực tiếp từ df, chọn cột lệch NHẤT (không phải cột đầu tiên vượt ngưỡng theo thứ
+        # tự dict, vốn phụ thuộc tình cờ thứ tự cột trong file).
+        most_skewed_col, most_skewed_val = None, 0.0
+        for col in basic.keys():
+            # Cờ nhị phân (0/1) mất cân bằng (vd attrition hiếm) có thể có |skewness| RẤT cao
+            # về mặt số học nhưng vẽ violin cho nó vô nghĩa — loại trước, không chỉ dựa vào
+            # DISTRIBUTION_SHAPE_TOOLS guard ở execute_plan() (lúc đó đã phí mất slot trigger).
+            if not _col_has_enough_variety(df, col):
+                continue
+            try:
+                skew = df[col].dropna().skew()
+            except Exception:
+                continue
+            if abs(skew) > 1.5 and abs(skew) > abs(most_skewed_val):
+                most_skewed_col, most_skewed_val = col, skew
+        if most_skewed_col:
+            extra.append({"tool": "plot_violin", "params": {"col": most_skewed_col}})
 
         numeric_cols = list(basic.keys())
         if len(numeric_cols) >= MIN_COLS_FOR_PAIRPLOT:
@@ -249,6 +288,17 @@ def _summarize_phase1(phase1_results, extra_steps=None):
         lines.append("- Đã check_type_mismatch")
     done_tools = list(_PHASE1_TOOLS) + ["basic_stats"]
 
+    n_outlier_cols = len(results_for_tool(phase1_results, "check_outliers_iqr"))
+    if n_outlier_cols:
+        lines.append(f"- Đã check_outliers_iqr cho TẤT CẢ {n_outlier_cols} cột số — KHÔNG cần gọi lại")
+        done_tools.append("check_outliers_iqr")
+    if "correlation_matrix" in phase1_results:
+        lines.append(
+            "- Đã correlation_matrix (Pearson) cho tất cả cột số — chỉ gọi lại nếu muốn xem "
+            "tập cột con khác hoặc dùng Spearman"
+        )
+        done_tools.append("correlation_matrix")
+
     if extra_steps:
         triggered_tools = [s["tool"] for s in extra_steps]
         lines.append(f"- Đã tự động trigger: {', '.join(triggered_tools)} (theo rule dựa trên kết quả Phase 1)")
@@ -263,45 +313,74 @@ _CORR_TOOLS = {"correlation_matrix", "spearman_correlation"}
 _GROUP_TOOLS = {"group_stats"}
 
 
-def _auto_score(results, tool_name, params, df):
-    """Gắn significance score vào results sau khi tool chạy xong."""
+def _disambiguated_key(tool_name, params, results):
+    """Key để lưu vào `results` — giữ nguyên `tool_name` cho lần gọi đầu (tương thích ngược
+    với mọi nơi đang đọc results[tool_name] trực tiếp: insight_generator, UI stat-card,
+    code_export). Nếu planner gọi LẠI cùng tool với param khác (vd check_outliers_iqr cho 2
+    cột khác nhau), lần gọi sau dùng key riêng theo param — tránh bug cũ: `results` chỉ key
+    theo tên tool nên lần gọi sau âm thầm đè mất kết quả lần gọi trước.
+    """
+    if tool_name not in results:
+        return tool_name
+    parts = []
+    for v in params.values():
+        if isinstance(v, (list, tuple)):
+            parts.append("-".join(str(x) for x in v))
+        elif v is not None:
+            parts.append(str(v))
+    suffix = "_".join(parts) or "x"
+    key = f"{tool_name}__{suffix}"
+    n = 2
+    while key in results:
+        key = f"{tool_name}__{suffix}_{n}"
+        n += 1
+    return key
+
+
+def results_for_tool(results, tool_name):
+    """Trả về list giá trị trong `results` thuộc về `tool_name` — gồm key gốc (lần gọi đầu)
+    và mọi key disambiguated `tool_name__...` (lần gọi sau, xem `_disambiguated_key`). Dùng
+    để gộp đủ kết quả khi tool bị gọi nhiều lần, không chỉ đọc lần gọi đầu.
+    """
+    prefix = f"{tool_name}__"
+    return [v for k, v in results.items() if k == tool_name or k.startswith(prefix)]
+
+
+def significant_pairs_for_tool(results, tool_name):
+    """Gộp tất cả '<tool_name>[...]_significant_pairs' — kể cả khi tool tương quan bị gọi
+    nhiều lần với `cols` khác nhau (mỗi lần là 1 key riêng theo `_disambiguated_key`).
+    """
+    suffix = "_significant_pairs"
+    pairs = []
+    for k, v in results.items():
+        if not k.endswith(suffix):
+            continue
+        if k == f"{tool_name}{suffix}" or k.startswith(f"{tool_name}__"):
+            pairs.extend(v or [])
+    return pairs
+
+
+def _auto_score(results, tool_name, result_key, params, df):
+    """Gắn significance score vào results sau khi tool chạy xong — lưu theo `result_key`
+    (không phải `tool_name` thô) để không bị đè khi tool chạy nhiều lần với param khác.
+    """
     try:
         if tool_name in _TREND_TOOLS:
             col = params.get("col")
-            data = results.get(tool_name)
+            data = results.get(result_key)
             if col and isinstance(data, list) and data:
                 series = pd.DataFrame(data).iloc[:, -1]  # cột giá trị cuối
                 s = scorer.score_trend(series)
                 if s:
-                    results[f"{tool_name}_significance"] = s
+                    results[f"{result_key}_significance"] = s
 
         elif tool_name in _CORR_TOOLS:
-            data = results.get(tool_name)
-            n = len(df)
-            if isinstance(data, list):
-                seen_pairs = set()
-                candidates = []
-                for row in data:
-                    if not row:
-                        continue
-                    # to_dict(orient="records") mất tên dòng — suy ra từ vị trí đường chéo (=1.0)
-                    diag = [k for k, v in row.items() if isinstance(v, (int, float)) and abs(v - 1.0) < 1e-9]
-                    col_name = diag[0] if diag else None
-                    if col_name is None:
-                        continue
-                    for other_col, r_val in row.items():
-                        if other_col == col_name or not isinstance(r_val, (int, float)):
-                            continue
-                        pair_key = frozenset((col_name, other_col))
-                        if pair_key in seen_pairs:
-                            continue
-                        seen_pairs.add(pair_key)
-                        s = scorer.score_pearson(r_val, n)
-                        if s and s["significant"] and abs(r_val) > 0.3:
-                            candidates.append({"col1": col_name, "col2": other_col, **s})
+            cols = params.get("cols")
+            method = "spearman" if tool_name == "spearman_correlation" else "pearson"
+            if cols:
+                candidates = scorer.top_significant_correlations(df, cols, n=3, method=method)
                 if candidates:
-                    candidates.sort(key=lambda p: -abs(p["r"]))
-                    results[f"{tool_name}_significant_pairs"] = candidates[:3]
+                    results[f"{result_key}_significant_pairs"] = candidates
 
         elif tool_name in _GROUP_TOOLS:
             col = params.get("col")
@@ -309,7 +388,7 @@ def _auto_score(results, tool_name, params, df):
             if col and by:
                 s = scorer.score_group_diff(df, col, by)
                 if s:
-                    results[f"{tool_name}_significance"] = s
+                    results[f"{result_key}_significance"] = s
     except Exception:
         pass  # scoring là optional, không được làm crash execute_plan
 
@@ -318,6 +397,7 @@ class EDAAgent(BaseAgent):
     def __init__(self, context):
         super().__init__(context)
         self.df = None
+        self.code_meta = {}
 
     def detect(self):
         """Đọc schema, tìm join key, đề xuất merge plan (bước 2 trong FLOW.md)."""
@@ -329,18 +409,29 @@ class EDAAgent(BaseAgent):
 
         if len(files) == 1:
             df = next(iter(files.values())).copy()
+            self.code_meta = {"file_names": list(files.keys()), "merge_applied": False}
         else:
             merge_plan = detection["merge_plan"]
             if merge_plan.can_merge and self.context.extra.get("merge_confirmed", True):
                 df = merge_files(files, merge_plan)
+                self.code_meta = {
+                    "file_names": list(files.keys()),
+                    "merge_applied": True,
+                    "merge_groups": merge_plan.groups,
+                    "merge_reason": merge_plan.reason,
+                }
             else:
                 df = next(iter(files.values())).copy()
+                self.code_meta = {"file_names": [next(iter(files.keys()))], "merge_applied": False}
 
         dt_cols = detect_datetime_columns(df)
         if dt_cols:
             col = dt_cols[0]
             df[col] = pd.to_datetime(df[col])
             df = df.set_index(col).sort_index()
+            self.code_meta["datetime_col"] = col
+        else:
+            self.code_meta["datetime_col"] = None
 
         return df
 
@@ -350,6 +441,11 @@ class EDAAgent(BaseAgent):
         charts = []
         log = []
         chart_id_counter = 0
+        # Chữ ký (tool, params) các chart đã vẽ — chặn LLM planner gọi lại đúng y 1 chart đã có
+        # (vd trigger đã vẽ plot_pairplot(cols=X) nhưng planner KHÔNG tuân thủ phase1_summary,
+        # tự gọi lại đúng cols đó lần 2) — nguyên tắc "không tin LLM tuân thủ 100% prompt, phải
+        # có guard runtime" giống DATETIME_REQUIRED_TOOLS/DISTRIBUTION_SHAPE_TOOLS bên dưới.
+        seen_chart_signatures = set()
 
         for step in plan_data.get("steps", []):
             tool_name = step.get("tool")
@@ -362,6 +458,17 @@ class EDAAgent(BaseAgent):
             if func is None:
                 log.append({"step": tool_name, "params": params, "status": "skipped", "reason": "tool không tồn tại"})
                 continue
+
+            if tool_name in CHART_TOOLS:
+                chart_sig = (tool_name, tuple(sorted(
+                    (k, tuple(v) if isinstance(v, (list, tuple)) else v) for k, v in params.items()
+                )))
+                if chart_sig in seen_chart_signatures:
+                    log.append({
+                        "step": tool_name, "params": params, "status": "skipped",
+                        "reason": "chart giống hệt (cùng tool + cùng params) đã chạy trước đó",
+                    })
+                    continue
 
             if tool_name in DATETIME_REQUIRED_TOOLS and not isinstance(df.index, pd.DatetimeIndex):
                 log.append({"step": tool_name, "params": params, "status": "skipped", "reason": "tool yêu cầu DatetimeIndex"})
@@ -378,28 +485,38 @@ class EDAAgent(BaseAgent):
             for retry_count in range(MAX_RETRIES):
                 try:
                     output = func(df, **params)
+                    result_key = tool_name
                     if tool_name in CHART_TOOLS:
                         chart_entry = {"path": output, "caption": _make_caption(tool_name, params), "source": source}
+                        if tool_name in WIDE_CHART_TOOLS:
+                            chart_entry["wide"] = True
                         if source == "planner":
                             chart_id_counter += 1
                             chart_entry["id"] = chart_id_counter
                         charts.append(chart_entry)
-                    elif isinstance(output, pd.DataFrame):
-                        if len(output) > MAX_RESULT_ROWS:
-                            results[tool_name] = {
-                                "data": output.head(MAX_RESULT_ROWS).to_dict(orient="records"),
-                                "truncated": True,
-                                "total_rows": len(output),
-                            }
-                        else:
-                            results[tool_name] = output.to_dict(orient="records")
+                        seen_chart_signatures.add(chart_sig)
                     else:
-                        results[tool_name] = output
+                        # _disambiguated_key: nếu tool này đã chạy trước (vd check_outliers_iqr
+                        # cho cột khác), dùng key riêng theo param — không đè mất kết quả cũ.
+                        result_key = _disambiguated_key(tool_name, params, results)
+                        if isinstance(output, pd.DataFrame):
+                            if len(output) > MAX_RESULT_ROWS:
+                                results[result_key] = {
+                                    "data": output.head(MAX_RESULT_ROWS).to_dict(orient="records"),
+                                    "truncated": True,
+                                    "total_rows": len(output),
+                                }
+                            else:
+                                results[result_key] = output.to_dict(orient="records")
+                        else:
+                            results[result_key] = output
 
-                    # Auto-score: gắn p-value / significance vào kết quả thống kê
-                    _auto_score(results, tool_name, params, df)
+                        _auto_score(results, tool_name, result_key, params, df)
 
-                    log.append({"step": tool_name, "params": params, "status": "success", "retry_count": retry_count})
+                    log.append({
+                        "step": tool_name, "params": params, "status": "success",
+                        "retry_count": retry_count, "result_key": result_key,
+                    })
                     break
                 except Exception as e:
                     if retry_count == MAX_RETRIES - 1:
@@ -411,19 +528,20 @@ class EDAAgent(BaseAgent):
         context = context or self.context
         self._status = "running"
 
+        from mlops import tracker
+        tracker.init_run(context.experiment_type, {"files": list(context.files.keys())})
+
         try:
             detection = self.detect()
             self.df = self._prepare_dataframe(detection)
             has_datetime_index = isinstance(self.df.index, pd.DatetimeIndex)
 
-            # Phase 1: kiểm tra chất lượng cứng + profiling (không cần LLM)
             phase1_results, phase1_log = _run_phase1(self.df)
             extra_steps = _trigger_rules(phase1_results, self.df)
             for step in extra_steps:
                 step["source"] = "trigger"  # chart tổng quan — không cần LLM gắn thẻ liên kết insight
             phase1_summary = _summarize_phase1(phase1_results, extra_steps)
 
-            # ydata-profiling: chạy nhanh, lấy context bổ sung (lỗi thì bỏ qua)
             profiling_ctx = profiler.profiling_to_context(profiler.run_profiling(self.df))
 
             # Sinh hypothesis TRƯỚC khi plan, để planner sinh đúng bước kiểm chứng
@@ -434,7 +552,6 @@ class EDAAgent(BaseAgent):
                 profiling_context=profiling_ctx,
             )
 
-            # Sinh câu hỏi phân tích từ schema, gộp vào query
             question_data = generate_questions(
                 detection["schemas"],
                 user_query=context.user_query,
@@ -456,7 +573,6 @@ class EDAAgent(BaseAgent):
                     + "\n".join(f"- {h}" for h in hypotheses)
                 ).strip()
 
-            # Phase 2: LLM lập kế hoạch với context từ Phase 1
             plan_data = eda_plan(
                 enriched_query,
                 detection["schemas"],
@@ -465,14 +581,11 @@ class EDAAgent(BaseAgent):
                 has_datetime_index=has_datetime_index,
                 phase1_summary=phase1_summary,
             )
-            # Ghép trigger steps vào đầu plan Phase 2
             if extra_steps:
                 plan_data["steps"] = extra_steps + plan_data.get("steps", [])
 
-            # Thực thi Phase 2
             phase2_results, charts, phase2_log = self.execute_plan(plan_data, self.df)
 
-            # Gộp kết quả hai phase, phase1 làm nền cho insight
             results = {**phase1_results, **phase2_results}
             log = phase1_log + phase2_log
             insights = generate_insight(results, context.domain_context, hypotheses=hypotheses, charts=charts)
@@ -480,8 +593,8 @@ class EDAAgent(BaseAgent):
             self._status = "done"
             return AgentResult(
                 success=True,
-                summary=plan_data.get("explanation", ""),
-                data={"results": results, "merge_info": detection},
+                summary=plan_data.get("explanation") if isinstance(plan_data.get("explanation"), str) else "",
+                data={"results": results, "merge_info": detection, "code_meta": self.code_meta},
                 charts=charts,
                 insights=insights,
                 log=log,
@@ -489,6 +602,8 @@ class EDAAgent(BaseAgent):
         except Exception as e:
             self._status = "error"
             return AgentResult(success=False, error=str(e))
+        finally:
+            tracker.finish_run()
 
     async def get_status(self):
         return self._status

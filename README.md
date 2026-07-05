@@ -1,62 +1,135 @@
-# AutoEDA — Tự động khám phá dữ liệu và phát triển mô hình học máy
+# DataPilot
 
-## Mô tả
+Hệ thống trợ lý AI hỗ trợ khám phá dữ liệu và phát triển mô hình học máy qua giao tiếp tiếng Việt tự nhiên. Người dùng không cần biết lập trình — chỉ cần mô tả yêu cầu, hệ thống tự lập kế hoạch và thực thi phân tích.
 
-Prototype rút gọn của **VMLP (Viettel ML Platform)** với AI agent bổ sung vào module Khám phá dữ liệu. Người dùng tạo bài toán, chọn loại experiment, agent tự động phân tích và trả về insight tiếng Việt.
+<!-- TODO: chèn ảnh home.png (màn hình trang chủ) -->
 
-Đây là đề tài **107 — VDT 2026**, tập trung vào AutoEDA trong bộ 4 module (AutoEDA, Feature Engineering, AutoML, XAI).
+---
 
-## Input / Output
+## Tính năng
 
-| | Mô tả |
+<!-- TODO: chèn Hình 1 — Kiến trúc tổng thể 4 tầng (UI → Agent → Tools/LLM → MLOps) -->
+
+Hệ thống hỗ trợ 6 loại nghiệp vụ:
+
+| Nghiệp vụ | Mô tả |
 |---|---|
-| **Input** | File CSV/Excel (tối đa 5 file) + file nghiệp vụ Word/txt (optional) + câu hỏi tiếng Việt |
-| **Output** | Biểu đồ thống kê + nhận xét tiếng Việt + gợi ý bước tiếp + báo cáo EDA PDF/HTML + baseline ML (optional) |
+| **Khám phá dữ liệu (AutoEDA)** | Tự động phân tích chất lượng, sinh insight, kiểm chứng giả thuyết |
+| **Tiền xử lý** | Xử lý missing, outlier, encoding, scaling theo kế hoạch LLM |
+| **Huấn luyện mô hình** | Tự chọn và huấn luyện baseline model phù hợp bài toán |
+| **Đánh giá mô hình** | Báo cáo metrics, so sánh model |
+| **Suy luận** | Dự đoán trên dữ liệu mới từ model đã lưu |
+| **Full pipeline** | Chạy liên tiếp từ EDA đến inference |
 
-## Tài liệu
+Giao tiếp qua form cấu hình hoặc **chatbot dẫn dắt** (5/6 nghiệp vụ).
 
-| File | Dùng khi nào |
-|------|-------------|
-| `README.md` | Đọc đầu tiên, tổng quan project |
-| `REQUIREMENTS.md` | Không biết cần làm gì, check scope và đầu ra |
-| `ARCHITECTURE.md` | Thiết kế cấu trúc thư mục, viết code mới |
-| `FLOW.md` | Implement agent, không biết bước nào gọi gì |
-| `TOOLS.md` | Viết tool library, tra function signature |
-| `PROMPTS.md` | Viết prompt cho từng agent |
-| `DATASET.md` | Làm việc với dataset điện lực |
-| `METRICS.md` | Viết eval script, đầu ra số 3 |
-| `ROADMAP.md` | Không biết làm gì tiếp theo, check checklist |
+---
 
-## 6 loại experiment template
+## Thiết kế AutoEDA: Deterministic trước, LLM sau
 
-| Template | Agent | Mức độ |
-|----------|-------|--------|
-| Khám phá dữ liệu | `eda_agent` | Làm kỹ — core của project |
-| Xử lý dữ liệu | `preprocessing_agent` | Cơ bản |
-| Huấn luyện mô hình | `training_agent` | Cơ bản |
-| Đánh giá mô hình | `evaluation_agent` | Cơ bản |
-| Suy luận mô hình | `inference_agent` | Cơ bản |
-| Tùy chỉnh | Không có agent | User tự nhập |
-| Full Pipeline | `pipeline_agent` | Gọi tuần tự EDA→Xử lý→Train→Đánh giá |
+Module trọng tâm của đề tài. Hai giai đoạn tách biệt:
+
+<!-- TODO: chèn Hình 2 — Luồng xử lý AutoEDA 2 giai đoạn (Phase 1 → Sinh giả thuyết → Phase 2 → Insight, có vòng refinement) -->
+
+**Phase 1 — Deterministic:** chạy cứng, không phụ thuộc LLM
+- Kiểm tra chất lượng dữ liệu (missing, duplicate, sai kiểu, outlier)
+- Profiling thống kê toàn bộ cột
+- Chấm điểm tự động: Kendall's tau, p-value, Mutual Information, Kruskal-Wallis
+
+**Phase 2 — LLM planning:** LLM chọn tool từ registry đã kiểm chứng (không tự sinh code)
+- Sinh giả thuyết domain-aware → kiểm chứng bằng số liệu thực (xác nhận / bác bỏ / không đủ bằng chứng)
+- Guard runtime nhiều lớp: bỏ qua tool không phù hợp schema, chặn chart trùng, retry khi lỗi
+- Refinement: người dùng góp ý → planner chạy lại trên cùng ngữ cảnh
+
+<!-- TODO: chèn ảnh report_figures/result_1.png (kế hoạch phân tích + chỉ số Phase 1) -->
+<!-- TODO: chèn ảnh report_figures/result_5.png (kết quả kiểm chứng giả thuyết H1/H2/H3) -->
+
+---
+
+## Kết quả đo thực tế
+
+Tính từ 114 phiên chạy thật (26/6–2/7/2026, gộp 6 nghiệp vụ):
+
+- **Execution Pass Rate:** 98,9% (1.530/1.547 bước thành công)
+- **Session không lỗi:** 78,1% (89/114 phiên)
+- **Token trung bình:** ~9.425 token/phiên EDA (~$0,001–$0,003 với gpt-4o-mini)
+- **EDA Completeness:** 5/8 hạng mục đảm bảo cứng bởi kiến trúc
+
+---
 
 ## Tech stack
 
-| Layer | Công nghệ |
-|-------|-----------|
-| UI | Streamlit |
-| Agent | LangChain |
-| LLM | Groq API — Llama 3.3 70B / 3.1 8B |
-| Data processing | Pandas, NumPy |
-| EDA | ydata-profiling |
-| ML | Scikit-learn, XGBoost |
-| Visualization | Matplotlib, Seaborn |
-| Backend API | FastAPI |
-| MLOps | Weights & Biases, Docker Compose |
-| Report | WeasyPrint (PDF), Jinja2 (HTML) |
+- **LLM:** OpenAI API
+- **Data:** Pandas, NumPy, ydata-profiling, statsmodels
+- **Viz:** Matplotlib, Seaborn
+- **ML:** scikit-learn, XGBoost
+- **UI:** NiceGUI
+- **Backend:** FastAPI
+- **MLOps:** Weights & Biases (token tracking), JSON execution log
+- **Report:** WeasyPrint (PDF), Jinja2 (HTML)
+- **Deploy:** Docker Compose
 
-## Chạy project
+---
+
+## Cấu trúc project
+
+```
+datapilot/
+├── agents/          # Agent chuyên biệt cho từng nghiệp vụ
+│   ├── eda_agent.py
+│   ├── eda_planner.py
+│   ├── hypothesis_generator.py
+│   ├── insight_generator.py
+│   ├── preprocessing_agent.py
+│   ├── training_agent.py
+│   └── ...
+├── llm/             # LLM client + prompt templates
+├── tools/           # Tool registry: viz, profiling, stats, ML
+├── mlops/           # Logger, W&B tracker, FastAPI backend
+├── ui_nicegui/      # Giao diện NiceGUI + chatbot
+├── tests/
+├── docker-compose.yml
+└── requirements.txt
+```
+
+---
+
+## Chạy local
+
+**Yêu cầu:** Python 3.10+, OpenAI API key
 
 ```bash
-docker-compose up --build
-# Mở http://localhost:8501
+# 1. Cài dependencies
+pip install -r requirements.txt
+
+# 2. Tạo file .env
+echo "OPENAI_API_KEY=sk-..." > .env
+
+# 3. Chạy UI
+python ui_nicegui/app.py
+# Mở http://localhost:8502
+
+# 4. (Tuỳ chọn) Chạy backend API
+uvicorn mlops.api.main:app --port 8000 --reload
 ```
+
+**Chạy bằng Docker:**
+
+```bash
+docker compose up
+```
+
+---
+
+## Demo
+
+<!-- TODO: chèn ảnh report_figures/result_3.png (insight tiếng Việt kèm số liệu) -->
+<!-- TODO: chèn ảnh report_figures/result_4.jpg (biểu đồ tự sinh: phụ tải theo thời gian) -->
+
+---
+
+## Đề tài
+
+VDT 2026 — Đề tài 107  
+Sinh viên: Nguyễn Vẹn Toàn  
+Mentor: Vũ Minh Thư — Viettel Solutions

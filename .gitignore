@@ -10,3 +10,27 @@ venv/
 data/
 outputs/
 .DS_Store
+
+# NiceGUI / W&B local cache
+.nicegui/
+wandb/
+
+# Logs & LaTeX artifacts
+*.log
+*.tex
+*.aux
+*.out
+*.fls
+*.fdb_latexmk
+
+# PDF / slide / report assets
+*.pdf
+report_figures/
+"slide mẫu/"
+
+# Tất cả .md trừ README
+*.md
+!README.md
+
+# Streamlit UI cũ
+ui/

@@ -68,7 +68,11 @@ def detect_task_type(df, target_col):
 
     series = df[target_col].dropna()
     if pd.api.types.is_numeric_dtype(series):
-        if series.nunique() <= 10:
+        # nunique() thấp không đủ để coi là classification — cột liên tục (vd điểm đánh giá
+        # 1.2/3.6/4.8) tình cờ có ít giá trị duy nhất trong sample vẫn là continuous, fit
+        # classifier lên nó sẽ raise "Unknown label type: continuous" ở sklearn.
+        is_integer_like = (series == series.round()).all()
+        if is_integer_like and series.nunique() <= 10:
             return "classification"
         return "regression"
 

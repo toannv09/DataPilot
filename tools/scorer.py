@@ -46,6 +46,35 @@ def score_pearson(r, n):
         return None
 
 
+def top_significant_correlations(df, cols, n=3, min_abs_r=0.3, method="pearson"):
+    """Tính ma trận tương quan (Pearson/Spearman) giữa `cols`, trả về top `n` cặp có
+    |r| > min_abs_r và đáng kể về thống kê (p<0.05). Dùng cho insight EDA và để code export
+    tái tạo lại đúng bước này.
+    """
+    cols = [c for c in cols if c in df.columns]
+    if len(cols) < 2:
+        return []
+
+    corr = df[cols].corr(method=method)
+    n_rows = len(df)
+    seen_pairs = set()
+    candidates = []
+    for col_a in cols:
+        for col_b in cols:
+            if col_a == col_b:
+                continue
+            pair_key = frozenset((col_a, col_b))
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            s = score_pearson(corr.loc[col_a, col_b], n_rows)
+            if s and s["significant"] and abs(s["r"]) > min_abs_r:
+                candidates.append({"col1": col_a, "col2": col_b, **s})
+
+    candidates.sort(key=lambda p: -abs(p["r"]))
+    return candidates[:n]
+
+
 def score_group_diff(df, col, by):
     """Kruskal-Wallis test — kiểm tra khác biệt phân phối giữa các nhóm (không giả định chuẩn)."""
     try:

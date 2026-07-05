@@ -7,7 +7,7 @@ from mlops.api.routes import experiments, problems, report, upload
 
 load_dotenv()
 
-app = FastAPI(title="AutoEDA API")
+app = FastAPI(title="DataPilot API")
 
 app.state.problems = {}
 app.state.experiments = {}

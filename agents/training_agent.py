@@ -4,7 +4,7 @@ import json
 import re
 
 from agents.base_agent import AgentResult, BaseAgent
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from llm.prompts.ml_prompt import ML_EXPLANATION_USER, TASK_DETECTION_USER
 from tools.ml import ml_viz
 from tools.ml.model_selector import detect_task_type, get_baseline_models
@@ -141,12 +141,17 @@ class TrainingAgent(BaseAgent):
             return AgentResult(success=False, error=str(e))
 
     def _detect_task(self, context, df):
+        # Gửi kèm dtype + nunique mỗi cột — chỉ tên cột không đủ để LLM phân biệt cột continuous
+        # (vd monthly_salary) với cột discrete (vd attrition), dễ chọn nhầm target.
+        columns = {
+            col: {"dtype": str(df[col].dtype), "nunique": int(df[col].nunique())} for col in df.columns
+        }
         prompt = TASK_DETECTION_USER.format(
             user_query=context.user_query,
-            dataset_info=json.dumps({"columns": list(df.columns)}, ensure_ascii=False),
+            dataset_info=json.dumps({"columns": columns}, ensure_ascii=False, default=str),
             eda_insights=context.extra.get("eda_insights", ""),
         )
-        response = call_llm(prompt, model=MODEL_70B)
+        response = call_llm(prompt, model=MODEL_DEFAULT)
         try:
             return _extract_json(response)
         except (json.JSONDecodeError, AttributeError):
@@ -164,7 +169,7 @@ class TrainingAgent(BaseAgent):
             feature_importance=json.dumps(feature_importance, ensure_ascii=False),
             domain_context=context.domain_context,
         )
-        return call_llm(prompt, model=MODEL_70B)
+        return call_llm(prompt, model=MODEL_DEFAULT)
 
     async def get_status(self):
         return self._status

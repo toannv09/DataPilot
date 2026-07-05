@@ -1,6 +1,27 @@
 """Resample, merge nhiều file theo MergePlan và validate kết quả."""
 
+import re
+
 import pandas as pd
+
+# pandas >= 2.2 đổi tên 1 số alias tần suất (vd 'M' -> 'ME', 'H' -> 'h') và cảnh báo
+# FutureWarning với tên cũ — LLM (schema_analyzer/eda_planner) vẫn có thể sinh ra tên cũ, nên
+# chuẩn hóa lại ở đây thay vì bắt LLM phải biết tên mới.
+_DEPRECATED_FREQ_ALIASES = {
+    "M": "ME", "Q": "QE", "Y": "YE", "A": "YE", "BM": "BME", "BQ": "BQE", "BA": "BYE",
+    "H": "h", "T": "min", "S": "s", "L": "ms", "U": "us", "N": "ns",
+}
+
+
+def normalize_freq(freq):
+    """Map alias tần suất cũ (đã deprecated) sang tên mới — giữ nguyên phần số/prefix (vd '2M' -> '2ME')."""
+    if not isinstance(freq, str):
+        return freq
+    match = re.fullmatch(r"(\d*)([A-Za-z]+)", freq.strip())
+    if not match:
+        return freq
+    count, alias = match.groups()
+    return f"{count}{_DEPRECATED_FREQ_ALIASES.get(alias, alias)}"
 
 
 def resample_to_frequency(df, col, freq):
@@ -15,7 +36,7 @@ def resample_to_frequency(df, col, freq):
     agg = {c: "mean" for c in numeric_cols}
     agg.update({c: "first" for c in other_cols})
 
-    resampled = df.resample(freq).agg(agg)
+    resampled = df.resample(normalize_freq(freq)).agg(agg)
     return resampled.reset_index()
 
 

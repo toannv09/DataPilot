@@ -9,6 +9,7 @@ import uuid
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from tools.file_merger import normalize_freq
 from tools.stats_engine import hourly_pattern, weekly_pattern, monthly_pattern, time_series_decompose
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs", "charts")
@@ -44,7 +45,7 @@ def plot_time_series(df, col, resample=None):
     """Line chart theo thời gian, có thể resample (vd: '1D')."""
     series = df[col]
     if resample:
-        series = series.resample(resample).mean()
+        series = series.resample(normalize_freq(resample)).mean()
 
     fig, ax = plt.subplots(figsize=(12, 5))
     series.plot(ax=ax)

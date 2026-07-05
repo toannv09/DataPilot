@@ -18,7 +18,7 @@ def init_run(experiment_type, dataset_info):
         return None
 
     _run = wandb.init(
-        project="autoeda",
+        project="datapilot",
         config={"experiment_type": experiment_type, "dataset_info": dataset_info},
         reinit=True,
     )

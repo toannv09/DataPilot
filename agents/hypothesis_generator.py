@@ -3,7 +3,7 @@
 import json
 import re
 
-from llm.client import MODEL_8B, call_llm
+from llm.client import MODEL_LITE, call_llm
 
 HYPOTHESIS_SYSTEM = """
 Bạn là data analyst. Dựa trên thông tin domain và schema dataset,
@@ -86,7 +86,7 @@ def generate_hypotheses(schemas, domain_context="", user_query="", profiling_con
         profiling_hint=profiling_hint,
     )
     try:
-        response = call_llm(prompt, system=HYPOTHESIS_SYSTEM, model=MODEL_8B)
+        response = call_llm(prompt, system=HYPOTHESIS_SYSTEM, model=MODEL_LITE)
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
             data = json.loads(match.group(0))

@@ -7,8 +7,8 @@ from openai import APIStatusError, OpenAI
 
 from llm.cache import get_cached, set_cached
 
-MODEL_70B = "gpt-5.4-nano"
-MODEL_8B = "gpt-5.4-nano"
+MODEL_DEFAULT = "gpt-5.4-nano"
+MODEL_LITE = "gpt-5.4-nano"
 
 MAX_RETRIES = 3
 
@@ -22,7 +22,7 @@ def _get_client():
     return _client
 
 
-def call_llm(prompt, system=None, model=MODEL_70B, use_cache=True):
+def call_llm(prompt, system=None, model=MODEL_DEFAULT, use_cache=True, temperature=0.2):
     """Gọi OpenAI API, retry tối đa 3 lần khi rate limit, cache theo hash(input)."""
     cache_key = {"prompt": prompt, "system": system, "model": model}
     if use_cache:
@@ -40,7 +40,7 @@ def call_llm(prompt, system=None, model=MODEL_70B, use_cache=True):
     last_error = None
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.chat.completions.create(model=model, messages=messages)
+            response = client.chat.completions.create(model=model, messages=messages, temperature=temperature)
             content = response.choices[0].message.content
 
             try:

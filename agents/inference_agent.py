@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 from agents.base_agent import AgentResult, BaseAgent
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from tools.ml.metrics import compute_supervised_metrics
 from tools.ml.ml_viz import plot_actual_vs_predicted, plot_confusion_matrix
 from tools.ml.preprocessor import handle_missing
@@ -91,7 +91,7 @@ class InferenceAgent(BaseAgent):
                     predictions_sample=df_result.head(5).to_json(orient="records", force_ascii=False),
                     domain_context=context.domain_context,
                 ),
-                model=MODEL_70B,
+                model=MODEL_DEFAULT,
             )
 
             self._status = "done"

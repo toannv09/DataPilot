@@ -9,7 +9,7 @@ import markdown
 from jinja2 import Template
 from weasyprint import HTML
 
-from llm.client import MODEL_70B, call_llm
+from llm.client import MODEL_DEFAULT, call_llm
 from llm.prompts.report_prompt import REPORT_SYSTEM, REPORT_USER
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs", "reports")
@@ -42,10 +42,25 @@ HTML_TEMPLATE = Template("""
 <meta charset="utf-8">
 <title>Báo cáo phân tích dữ liệu</title>
 <style>
-body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-img { max-width: 100%; display: block; margin: 16px 0; }
-figcaption { color: #666; font-size: 0.9em; margin-bottom: 16px; }
-h1, h2, h3 { color: #2c3e50; }
+body { font-family: Georgia, 'Times New Roman', serif; margin: 40px auto; max-width: 880px;
+       line-height: 1.8; color: #333; }
+h1, h2, h3 { font-family: Arial, sans-serif; color: #1a1a1a; }
+h1 { font-size: 20px; font-weight: 700; border-left: 3px solid #EE0033; padding-left: 12px;
+     margin: 30px 0 14px; }
+h2 { font-size: 15px; font-weight: 600; color: #44494D; margin: 24px 0 10px; }
+h3 { font-size: 13px; font-weight: 600; color: #44494D; margin: 16px 0 8px; }
+p, li { font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px;
+        margin: 14px 0; }
+th { background: #F7F7F8; color: #44494D; font-weight: 600; text-align: left; padding: 7px 10px;
+     border-bottom: 1px solid rgba(0,0,0,0.1); }
+td { padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,0.06); color: #444; }
+img { max-width: 100%; display: block; margin: 16px 0; border-radius: 6px; }
+figcaption { font-family: Arial, sans-serif; color: #888; font-size: 11px; margin-bottom: 18px; }
+hr { border: none; border-top: 0.5px solid rgba(0,0,0,0.08); margin: 26px 0; }
+.aeda-report-footer { font-family: Arial, sans-serif; border-top: 0.5px solid rgba(0,0,0,0.08);
+                       padding-top: 14px; margin-top: 32px; font-size: 10px; color: #bbb;
+                       display: flex; justify-content: space-between; gap: 12px; }
 </style>
 </head>
 <body>
@@ -59,6 +74,10 @@ h1, h2, h3 { color: #2c3e50; }
 </figure>
 {% endfor %}
 {% endif %}
+<div class="aeda-report-footer">
+<span>DataPilot · Sinh tự động · {{ generated_at }}</span>
+<span>{{ problem_name }}{% if experiment_type %} · {{ experiment_type }}{% endif %}</span>
+</div>
 </body>
 </html>
 """)
@@ -86,13 +105,20 @@ def generate(dataset_info, eda_results, ml_results, execution_log, charts=None, 
         ml_results=json.dumps(_truncate(ml_results), ensure_ascii=False, default=str) if ml_results else "Không có",
         execution_log=json.dumps(_truncate(execution_log), ensure_ascii=False, default=str),
     )
-    content_md = call_llm(prompt, system=REPORT_SYSTEM, model=MODEL_70B)
+    content_md = call_llm(prompt, system=REPORT_SYSTEM, model=MODEL_DEFAULT)
     content_html = markdown.markdown(content_md)
 
-    full_html = HTML_TEMPLATE.render(content=content_html, charts=charts)
+    now = datetime.now()
+    full_html = HTML_TEMPLATE.render(
+        content=content_html,
+        charts=charts,
+        generated_at=now.strftime("%d/%m/%Y %H:%M"),
+        problem_name=dataset_info.get("problem_name") or "",
+        experiment_type=dataset_info.get("experiment_type") or "",
+    )
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
 
     if output_format == "pdf":
         path = os.path.join(OUTPUT_DIR, f"report_{timestamp}.pdf")
