@@ -7,8 +7,16 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-data/
-outputs/
+data/raw/*
+data/processed/*
+data/domain/*
+!data/**/.gitkeep
+outputs/charts/*
+outputs/logs/*
+outputs/ml_charts/*
+outputs/models/*
+outputs/reports/*
+!outputs/**/.gitkeep
 .DS_Store
 
 # NiceGUI / W&B local cache
